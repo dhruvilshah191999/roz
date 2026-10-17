@@ -10,6 +10,23 @@ Every day has the same puzzles for everybody. The server makes them, remembers t
 
 So there are always two copies of a game in play:
 
+```mermaid
+flowchart LR
+    subgraph server["Server copy, in Postgres"]
+        full["Full puzzle with the answer"]
+        rec["Start time, hints, finish time"]
+    end
+    subgraph phone["Phone copy, in the browser"]
+        pub["Puzzle without the answer"]
+        moves["Moves made so far"]
+    end
+    full -- "answer removed" --> pub
+    moves -- "sent on finish" --> check{"Server checks<br/>against its answer"}
+    full --> check
+    check -- "correct" --> coins["Result saved, coins paid"]
+    check -- "wrong" --> none["Nothing paid"]
+```
+
 | Where | What it holds | Why |
 |---|---|---|
 | Server (Postgres) | The full puzzle **with** the answer, when the player started, how many hints they took, when they finished | Coins are real money, so the server decides everything that pays |
@@ -30,6 +47,15 @@ secret + date + game name      e.g.  "xyz|2026-10-13|zip"
 The secret is an environment variable on the server. Because of it, nobody can work out tomorrow's puzzle from the app's code. Because of the date, everyone in the world gets the same puzzle today. Because of the game name, Zip and Pipes get different puzzles even on the same day.
 
 Code: `src/lib/games/rng.ts` (the seeded random numbers) and `dailySeed()` in `src/lib/games/index.ts`.
+
+```mermaid
+flowchart LR
+    seed["secret + date + game"] --> rng["Seeded random numbers"]
+    rng --> gen["Game recipe<br/>Zip, Pipes or Flash"]
+    gen --> store[("daily_puzzles<br/>stored once per day")]
+    store --> strip["Answer removed"]
+    strip --> phone["Sent to every phone"]
+```
 
 ### Making it once, keeping it
 
@@ -107,6 +133,24 @@ The moment this is true, the phone sends the whole solution to `POST /api/games/
 - Zip sends the list of cells in order.
 - Pipes sends how many quarter turns each tile got.
 - Flash sends every attempt made, round by round, including the wrong ones.
+
+```mermaid
+flowchart TD
+    move["Player makes a move"] --> save["Save moves in the browser"]
+    save --> local{"Phone's quick check:<br/>looks finished?"}
+    local -- "no" --> move
+    local -- "yes" --> send["Send all moves to the server"]
+    send --> lock["Lock the account and result rows"]
+    lock --> solved{"Already solved?"}
+    solved -- "yes" --> stop["Reply: already solved"]
+    solved -- "no" --> validate{"Server check against<br/>the stored answer"}
+    validate -- "fails" --> reason["Reply with the reason, no coins"]
+    validate -- "passes" --> pay["Save time, pay coins as ledger rows"]
+    pay --> set{"All of today's games solved?"}
+    set -- "yes" --> bonus["Set bonus, streak, streak bonus"]
+    set -- "no" --> reply["Reply with coins"]
+    bonus --> reply
+```
 
 **On the server**, inside one database transaction so nothing can be half-done:
 1. Lock the player's account row and their result row for this game. If the result is already marked solved, answer "already solved" and stop. This is what makes a double tap or a replayed request harmless.

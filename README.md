@@ -10,6 +10,42 @@ Roz is a mobile web app built for the Kenpath Labs build task. Everyone gets the
 - **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Design:** [docs/DESIGN.md](docs/DESIGN.md)
 
+## How it fits together
+
+```mermaid
+flowchart LR
+    phone["Phone browser<br/>draws the board, saves moves"]
+    subgraph vercel["Vercel"]
+        app["Next.js app<br/>pages and API routes"]
+        engines["Game engines<br/>generate, check, hint"]
+    end
+    db[("Postgres on Neon<br/>puzzles, results, coins")]
+    phone -- "pages and JSON" --> app
+    app --> engines
+    app -- "Drizzle" --> db
+```
+
+One daily game, from opening the page to getting coins:
+
+```mermaid
+sequenceDiagram
+    participant P as Phone
+    participant S as Server
+    participant D as Postgres
+    P->>S: Open the game page
+    S->>D: Read today's puzzle, create it once if missing
+    S-->>P: Puzzle without the answer
+    P->>S: Start
+    S->>D: Stamp the start time, first call only
+    Note over P: Player solves. Moves are saved in the browser.
+    P->>S: Submit the moves
+    S->>D: Lock rows and check against the stored answer
+    S->>D: Save the result and write coin rows
+    S-->>P: Time, coins and streak
+```
+
+The full story is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Run it locally
 
 You need Node 20 or newer and Docker (for Postgres). About five minutes.

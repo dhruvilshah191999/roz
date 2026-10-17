@@ -12,6 +12,27 @@
 | Hosting | Vercel free tier | Free, HTTPS, does not sleep, deploys from GitHub. |
 | Tests | Vitest | Engines and scoring are pure functions; tests run in seconds. |
 
+```mermaid
+flowchart TB
+    subgraph client["Phone browser"]
+        pages["Pages<br/>home, play, ranks, rewards, me"]
+        boards["Boards<br/>Zip, Pipes, Flash"]
+        local["localStorage<br/>moves so far"]
+    end
+    subgraph server["Next.js on Vercel"]
+        routes["API routes<br/>thin: cookie in, JSON out"]
+        lib["src/lib<br/>play, scoring, ledger, accounts"]
+        games["Game engines<br/>pure TypeScript"]
+    end
+    db[("Postgres<br/>Neon in production")]
+    pages --> boards
+    boards <--> local
+    pages -- "fetch" --> routes
+    routes --> lib
+    lib --> games
+    lib -- "Drizzle" --> db
+```
+
 Not used: auth library (cookie plus PIN is about 40 lines), Redis or cron (puzzles are seeded by date), state library (each board is one component), canvas (grids are divs and SVG), analytics, service worker.
 
 ## 2. Repository layout
@@ -76,6 +97,58 @@ Rule: everything in `src/lib/` is framework-free TypeScript. API routes are thin
 
 ## 3. Data model
 
+```mermaid
+erDiagram
+    accounts ||--o{ daily_results : "plays"
+    accounts ||--o{ ledger : "coin movements"
+    accounts ||--o{ redemptions : "redeems"
+    daily_puzzles ||..o{ daily_results : "same day and game"
+    accounts {
+        uuid id PK
+        text token_hash UK
+        text code UK
+        text display_name
+        text pin_hash
+        int balance
+        int lifetime_earned
+        int streak
+        date last_full_day
+    }
+    daily_puzzles {
+        date day PK
+        text game PK
+        jsonb puzzle
+    }
+    daily_results {
+        uuid account_id PK
+        date day PK
+        text game PK
+        timestamptz started_at
+        timestamptz solved_at
+        int elapsed_ms
+        int moves
+        int hints_used
+        bool under_par
+    }
+    ledger {
+        bigserial id PK
+        uuid account_id FK
+        int amount
+        text reason
+        date ref_day
+        text ref_game
+    }
+    redemptions {
+        uuid id PK
+        uuid account_id FK
+        int tier_coins
+        text brand
+        text code
+    }
+```
+
+Full column list:
+
 ```sql
 accounts
   id              uuid pk
@@ -115,7 +188,7 @@ ledger
   id              bigserial pk
   account_id      uuid fk
   amount          int                  -- signed
-  reason          text                 -- 'solve' | 'under_par' | 'full_set' | 'streak' | 'hint' | 'redeem' | 'merge' | 'weekly_top3'
+  reason          text                 -- 'solve' | 'under_par' | 'full_set' | 'streak' | 'hint' | 'redeem' | 'weekly_top3'
   ref_day         date null
   ref_game        text null
   created_at      timestamptz
@@ -144,9 +217,26 @@ Indexes: `daily_results(day, game)`, `ledger(account_id, created_at desc)`, `dai
   1. Look up account A by code. If `pin_locked_until` is in the future, 423.
   2. Verify PIN; on failure increment `pin_failed`, lock for one hour at five, 401.
   3. Load the current cookie's account B (if any, and if B ≠ A).
-  4. Transaction: move B's ledger rows to A with reason kept and a `merge` marker; add B's `balance` and `lifetime_earned` to A; move B's `daily_results` rows for days where A has none; delete B.
+  4. Transaction: for every day and game, keep the better of the two attempts and move B's other rows to A (rules below); delete B.
   5. Rotate A's token, set the cookie, return A's summary.
-- Daily results on merge: "A wins" on conflicts, so nothing is counted twice; coins B already earned stay because they were earned.
+- Merge rules live in `src/lib/merge.ts` as a pure function with tests. A puzzle never pays twice:
+
+```mermaid
+flowchart TD
+    start["Same day and game played<br/>on both accounts?"]
+    start -- "only on B" --> moveB["Move B's result and coins to A"]
+    start -- "only on A" --> keepA["Keep A's result and coins"]
+    start -- "on both" --> better{"Which attempt is better?<br/>a solve beats no solve<br/>then faster time<br/>Flash: fewer mistakes first<br/>tie keeps A"}
+    better -- "A" --> aWins["Keep A's result<br/>drop B's solve and under-par coins"]
+    better -- "B" --> bWins["B's result replaces A's<br/>drop A's solve and under-par coins"]
+    aWins --> hints["Hint costs from both stay"]
+    bWins --> hints
+    hints --> bonus{"A already has the full-set<br/>bonus for that day?"}
+    bonus -- "yes" --> dropBonus["Drop B's full-set and streak bonus"]
+    bonus -- "no" --> keepBonus["Move B's bonus to A"]
+```
+
+Rows that are not tied to a puzzle (redemptions, other days) always move. A's balance and lifetime total change by exactly the coin rows that were moved or dropped. The balance can go below zero if B had spent coins it no longer has; debits then fail until it is earned back.
 
 ## 5. Daily puzzles
 
@@ -162,6 +252,39 @@ Indexes: `daily_results(day, game)`, `ledger(account_id, created_at desc)`, `dai
 POST /api/games/:game/start           → { startedAt }      (idempotent; first call stamps)
 POST /api/games/:game/hint   {state}  → { hint, hintsUsed, charged, balance }
 POST /api/games/:game/submit {solution} → { ok, elapsedMs, moves, coins: [{reason, amount}], total, setDone, streak }
+```
+
+The submit call, end to end:
+
+```mermaid
+sequenceDiagram
+    participant P as Phone
+    participant R as Submit route
+    participant L as play.ts
+    participant D as Postgres
+    P->>R: POST submit with solution
+    R->>L: submitGame(account, day, game, solution)
+    L->>D: BEGIN
+    L->>D: Lock account row and result row (FOR UPDATE)
+    alt not started
+        L-->>P: 400 start the game first
+    else already solved
+        L-->>P: 409 already solved
+    else started and not solved
+        L->>L: Engine validate(puzzle, solution)
+        alt invalid
+            L-->>P: 422 with the reason
+        else valid
+            L->>D: Save solved time, elapsed, moves, under par
+            L->>D: Ledger rows: solve, under par
+            opt every game solved today
+                L->>D: Ledger rows: full set, streak bonus
+                L->>D: Update streak on the account
+            end
+            L->>D: COMMIT
+            L-->>P: Itemised coins, balance, streak
+        end
+    end
 ```
 
 Solution shapes:
@@ -185,6 +308,21 @@ Hint rules:
 Timer: `started_at` is set once by `/start` (called when the board mounts). Elapsed is computed on the server at submit. The client shows a running clock from `startedAt` for display only.
 
 ## 7. Streak computation (pure function in `scoring.ts`)
+
+```mermaid
+flowchart TD
+    done["Full set finished today"] --> q1{"Last full day?"}
+    q1 -- "today" --> same["No change, already counted"]
+    q1 -- "yesterday" --> plus["Streak + 1"]
+    q1 -- "two days ago" --> q2{"Shield used this week?"}
+    q2 -- "no" --> shield["Streak + 1<br/>mark shield used this week"]
+    q2 -- "yes" --> reset["Streak = 1"]
+    q1 -- "older or never" --> reset
+    plus --> best["Best streak = max of best and streak"]
+    shield --> best
+    reset --> best
+```
+
 
 ```
 input: lastFullDay, streak, shieldWeek, today, isoWeek(today)
@@ -231,6 +369,15 @@ npm test                      # vitest
 ```
 
 Production:
+
+```mermaid
+flowchart LR
+    gh["GitHub<br/>main branch"] -- "push deploys" --> vercel["Vercel<br/>Next.js, Singapore region"]
+    user["Phones in India"] -- "HTTPS" --> vercel
+    vercel -- "pooled connection" --> neon[("Neon Postgres<br/>Singapore")]
+    laptop["Laptop"] -- "npm run db:migrate<br/>direct connection" --> neon
+```
+
 1. Create a Neon project, copy the pooled connection string into Vercel as `DATABASE_URL`; set `DAILY_SEED_SECRET` to any long random string.
 2. Import the GitHub repo in Vercel; build command is the default.
 3. Run `npm run db:migrate` once against the Neon URL from the laptop (or add it to the Vercel build command).
