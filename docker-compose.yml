@@ -1,0 +1,22 @@
+name: roz
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: roz-postgres
+    environment:
+      POSTGRES_USER: roz
+      POSTGRES_PASSWORD: roz
+      POSTGRES_DB: roz
+    ports:
+      - "5433:5432"
+    volumes:
+      - roz-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roz -d roz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  roz-pgdata:

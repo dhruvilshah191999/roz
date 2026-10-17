@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ground: #f1f2ee;
+  --color-surface: #ffffff;
+  --color-ink: #141414;
+  --color-muted: #5c5f58;
+  --color-faint: #8a8d86;
+  --color-line: #e2e4e0;
+  --color-green: #1d7a4a;
+  --color-green-deep: #0f5a35;
+  --color-green-tint: #e6f4ec;
+  --color-green-bright: #38c172;
+  --color-coin: #ffe98a;
+  --color-coin-icon: #f2b300;
+  --color-amber: #fff4d6;
+  --color-amber-ink: #9a6700;
+  --color-blue: #2563eb;
+  --color-blue-tint: #e3eef9;
+  --color-pipe: #a3a9b3;
+  --color-zip: #e9a23b;
+  --color-flame: #e4572e;
+  --color-dark: #141414;
+  --color-dark-2: #3a3a3a;
+
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-ground);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Page column: phone first, centred on wider screens */
+.col {
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--color-surface);
+  min-height: 100dvh;
+  padding-bottom: 40px;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 52px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 0 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  background: var(--color-ink);
+  color: #fff;
+}
+.btn-green {
+  background: var(--color-green);
+  color: #fff;
+}
+.btn-secondary {
+  background: #fff;
+  color: var(--color-ink);
+  border: 1.5px solid var(--color-ink);
+}
+.btn-tertiary {
+  background: #fff;
+  color: var(--color-ink);
+  border: 1.5px solid var(--color-line);
+}
+.btn-sm {
+  height: 36px;
+  font-size: 13px;
+  border-radius: 10px;
+  padding: 0 14px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.card {
+  border: 1.5px solid var(--color-line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.field {
+  height: 52px;
+  padding: 0 14px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 12px;
+  font-size: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+}
+.field:focus {
+  outline: 3px solid var(--color-coin);
+  outline-offset: 0;
+}
+
+.board {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pop {
+  animation: pop 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes hintpulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(233, 162, 59, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(233, 162, 59, 0.45);
+  }
+}
+.hint-ring {
+  animation: hintpulse 900ms ease-in-out 3;
 }

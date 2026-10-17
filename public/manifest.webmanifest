@@ -1,0 +1,10 @@
+{
+  "name": "Roz",
+  "short_name": "Roz",
+  "description": "A few small puzzles every day. Solve them, earn coins, keep your streak.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
