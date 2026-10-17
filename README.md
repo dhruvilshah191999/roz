@@ -4,7 +4,7 @@ A few small puzzles every day. Solve them, earn coins, keep your streak.
 
 Roz is a mobile web app built for the Kenpath Labs build task. Everyone gets the same set of puzzles each day (today: Zip, Pipes and Flash). Solving pays coins, finishing the whole set pays a bonus, a streak pays more, and coins can be exchanged for demo coupons. There is no login: an account is created silently on first visit, and an optional 4-digit PIN protects the coins across phones and browsers.
 
-- **Live:** _add your Vercel URL here_
+- **Live:** https://roz-gilt.vercel.app
 - **Explainer:** [EXPLAINER.md](EXPLAINER.md)
 - **How it works, in plain words:** [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
 - **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
